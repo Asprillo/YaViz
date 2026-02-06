@@ -24,14 +24,14 @@ export const parseYamlToFlow = (yamlStr, expandedPaths = new Set(), onToggle = (
             type: 'table',
             data: { 
                 label: 'Root', 
-                items: [{ key: 'Value', value: String(data), type: 'scalar', path: 'root' }], // Added path
+                items: [{ key: 'Value', value: String(data), type: 'scalar', path: 'root' }],
                 onToggle,
                 onEdit
             } 
-         }], 
-         edges: [], 
-         error: null 
-       };
+          }], 
+          edges: [], 
+          error: null 
+        };
     }
 
     const flowNodes = [];
@@ -45,8 +45,7 @@ export const parseYamlToFlow = (yamlStr, expandedPaths = new Set(), onToggle = (
         if (Array.isArray(obj)) {
             obj.forEach((item, index) => {
                 const key = String(index);
-                const itemPath = `${path}.${key}`;
-                
+                const itemPath = `${path}_${key}`; // USE UNDERSCORE
                 if (item && typeof item === 'object') {
                     // Logic Inversion: Null/False in Map means collapsed?
                     // We use a Set of EXPANDED paths.
@@ -57,7 +56,7 @@ export const parseYamlToFlow = (yamlStr, expandedPaths = new Set(), onToggle = (
                     items.push({ 
                         key, 
                         type: 'relation', 
-                        handleId: key,
+                        handleId: `${id}_h_${key}`,
                         path: itemPath, 
                         collapsed: isCollapsed
                     });
@@ -68,8 +67,9 @@ export const parseYamlToFlow = (yamlStr, expandedPaths = new Set(), onToggle = (
                         flowEdges.push({ 
                             id: `e_${id}_${key}_${childId}`, 
                             source: id, 
-                            sourceHandle: key,
-                            target: childId 
+                            sourceHandle: `${id}_h_${key}`,
+                            target: childId,
+                            targetHandle: 'target' // EXPLICIT TARGET HANDLE
                         });
                     }
                 } else {
@@ -80,7 +80,7 @@ export const parseYamlToFlow = (yamlStr, expandedPaths = new Set(), onToggle = (
         // 2. Object handling
         else if (obj && typeof obj === 'object') {
             Object.entries(obj).forEach(([key, value]) => {
-                const itemPath = `${path}.${key}`;
+                const itemPath = `${path}_${key}`; // USE UNDERSCORE
 
                 if (value && typeof value === 'object') {
                    let childLabel = key;
@@ -92,7 +92,7 @@ export const parseYamlToFlow = (yamlStr, expandedPaths = new Set(), onToggle = (
                    items.push({ 
                        key, 
                        type: 'relation', 
-                       handleId: key,
+                       handleId: `${id}_h_${key}`,
                        path: itemPath,
                        collapsed: isCollapsed
                    });
@@ -102,8 +102,9 @@ export const parseYamlToFlow = (yamlStr, expandedPaths = new Set(), onToggle = (
                        flowEdges.push({ 
                             id: `e_${id}_${key}_${childId}`, 
                             source: id, 
-                            sourceHandle: key,
-                            target: childId 
+                            sourceHandle: `${id}_h_${key}`,
+                            target: childId,
+                            targetHandle: 'target' // EXPLICIT TARGET HANDLE
                         });
                    }
                 } else {
