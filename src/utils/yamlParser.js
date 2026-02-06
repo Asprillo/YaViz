@@ -1,4 +1,4 @@
-import yaml from 'js-yaml';
+import { parse } from 'yaml';
 import dagre from 'dagre';
 
 const NODE_WIDTH = 250;
@@ -13,7 +13,7 @@ const ROW_HEIGHT = 32;
  */
 export const parseYamlToFlow = (yamlStr, expandedPaths = new Set(), onToggle = () => {}, onEdit = () => {}) => {
   try {
-    const data = yaml.load(yamlStr);
+    const data = parse(yamlStr);
     
     if (!data || (typeof data !== 'object')) {
        if (!yamlStr.trim()) return { nodes: [], edges: [], error: null };
@@ -45,7 +45,7 @@ export const parseYamlToFlow = (yamlStr, expandedPaths = new Set(), onToggle = (
         if (Array.isArray(obj)) {
             obj.forEach((item, index) => {
                 const key = String(index);
-                const itemPath = `${path}.${key}`;
+                const itemPath = `${path}::${key}`;
                 
                 if (item && typeof item === 'object') {
                     // Logic Inversion: Null/False in Map means collapsed?
@@ -80,7 +80,7 @@ export const parseYamlToFlow = (yamlStr, expandedPaths = new Set(), onToggle = (
         // 2. Object handling
         else if (obj && typeof obj === 'object') {
             Object.entries(obj).forEach(([key, value]) => {
-                const itemPath = `${path}.${key}`;
+                const itemPath = `${path}::${key}`;
 
                 if (value && typeof value === 'object') {
                    let childLabel = key;

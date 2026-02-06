@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import yaml from 'js-yaml';
+import { parseDocument } from 'yaml';
 import YamlEditor from './components/Editor';
 import Visualizer from './components/Visualizer';
 import { parseYamlToFlow } from './utils/yamlParser';
@@ -15,8 +15,6 @@ owner:
   name: Antigravity
   role: AI Assistant
 `;
-
-
 
 function App() {
   const [yamlString, setYamlString] = useState(initialYaml);
@@ -39,47 +37,75 @@ function App() {
 
   const handleEdit = (path, newValue) => {
       try {
-          // 1. Parse current YAML
-          const obj = yaml.load(yamlString);
-          
-          // 2. Update object at path
-          // Path is like 'root.features.0' or 'root.version'
-          // 'root' is the obj itself.
-          
-          const parts = path.split('.');
-          // Remove 'root'
+          const doc = parseDocument(yamlString);
+          const parts = path.split('::');
           if (parts[0] === 'root') parts.shift();
           
-          if (parts.length === 0) {
-              // Editing root scalar? Unlikely for object root, but possible if root is just "Hello".
-              // If it's an object, we can't really "edit" it to a string easily without replacing everything.
-              // Assuming we are editing a property.
-              // If we are here, something is weird or specific scalar root.
-              // Let's re-dump newValue.
-              const newYaml = yaml.dump(newValue);
-              setYamlString(newYaml);
-              return;
-          }
-
-          let current = obj;
-          for (let i = 0; i < parts.length - 1; i++) {
-              current = current[parts[i]];
-          }
-          
-          const lastKey = parts[parts.length - 1];
-          // Determine if we should parse newValue as number/boolean
-          // Simple heuristic: if it looks like a number, cast it.
           let valueToSet = newValue;
           if (!isNaN(Number(newValue)) && newValue.trim() !== '') {
               valueToSet = Number(newValue);
           } else if (newValue === 'true') valueToSet = true;
           else if (newValue === 'false') valueToSet = false;
 
-          current[lastKey] = valueToSet;
+          // Key Type Inference: Handle numeric keys (0 vs "0")
+          const typedParts = [];
+          let current = doc.contents;
+          for (const part of parts) {
+              if (current && typeof current.has === 'function') {
+                  if (current.has(part)) {
+                      typedParts.push(part);
+                      current = current.get(part);
+                  } else if (!isNaN(Number(part)) && current.has(Number(part))) {
+                      const numPart = Number(part);
+                      typedParts.push(numPart);
+                      current = current.get(numPart);
+                  } else {
+                      typedParts.push(part);
+                      current = null;
+                  }
+              } else {
+                  typedParts.push(part);
+              }
+          }
 
-          // 3. Dump back to YAML
-          const newYaml = yaml.dump(obj);
-          setYamlString(newYaml);
+          // Surgical update: If it's a scalar, update value directly to preserve formatting/comments
+          const node = doc.getIn(typedParts, true); // true = get node, not value
+          if (node && 'value' in node) {
+              node.value = valueToSet;
+          } else {
+              doc.setIn(typedParts, valueToSet);
+          }
+
+          // Surgical Comment Relocator: Move comments from value.commentBefore to key.comment
+          // This keeps comments like '0: #BR' on the same line when the value is a block node.
+          const relocateComments = (node) => {
+              if (!node || typeof node !== 'object') return;
+              if (node.items) {
+                  node.items.forEach(item => {
+                      if (item && item.key && item.value && item.value.commentBefore && !item.comment) {
+                          item.key.comment = item.value.commentBefore;
+                          item.value.commentBefore = null;
+                      }
+                      relocateComments(item.key);
+                      relocateComments(item.value);
+                  });
+              }
+          };
+          relocateComments(doc.contents);
+
+          // Detect indentation to preserve user style
+          const detectIndent = (str) => {
+              const match = str.match(/\n( +)[^ #\n]/);
+              return (match && match[1].length > 1) ? match[1].length : 2;
+          };
+          const currentIndent = detectIndent(yamlString);
+
+          setYamlString(doc.toString({ 
+              lineWidth: 0, 
+              indent: currentIndent,
+              simpleKeys: false, // Allows comments on keys without forcing complex key syntax
+              flowCollectionPadding: true
+          }));
 
       } catch (e) {
           console.error("Failed to update YAML", e);
