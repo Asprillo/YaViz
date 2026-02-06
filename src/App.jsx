@@ -23,6 +23,8 @@ function App() {
   const [edges, setEdges] = useState([]);
   const [error, setError] = useState(null);
 
+  const [pendingReveal, setPendingReveal] = useState(null);
+
   const handleToggle = (path) => {
     setExpandedPaths(prev => {
         const next = new Set(prev);
@@ -70,6 +72,17 @@ function App() {
 
           // Surgical update: If it's a scalar, update value directly to preserve formatting/comments
           const node = doc.getIn(typedParts, true); // true = get node, not value
+          
+          // CAPTURE RANGE FOR SYNC
+          if (node && node.range) {
+              setPendingReveal({
+                  start: node.range[0],
+                  end: node.range[1],
+                  // Use a timestamp to force trigger even if the same node is edited twice
+                  timestamp: Date.now() 
+              });
+          }
+
           if (node && 'value' in node) {
               node.value = valueToSet;
           } else {
@@ -77,7 +90,6 @@ function App() {
           }
 
           // Surgical Comment Relocator: Move comments from value.commentBefore to key.comment
-          // This keeps comments like '0: #BR' on the same line when the value is a block node.
           const relocateComments = (node) => {
               if (!node || typeof node !== 'object') return;
               if (node.items) {
@@ -100,12 +112,29 @@ function App() {
           };
           const currentIndent = detectIndent(yamlString);
 
-          setYamlString(doc.toString({ 
+          const updatedYaml = doc.toString({ 
               lineWidth: 0, 
               indent: currentIndent,
-              simpleKeys: false, // Allows comments on keys without forcing complex key syntax
+              simpleKeys: false,
               flowCollectionPadding: true
-          }));
+          });
+
+          // CALCULATE NEW RANGE FOR ACCURATE HIGHLIGHTING
+          try {
+              const newDoc = parseDocument(updatedYaml);
+              const newNode = newDoc.getIn(typedParts, true);
+              if (newNode && newNode.range) {
+                  setPendingReveal({
+                      start: newNode.range[0],
+                      end: newNode.range[1],
+                      timestamp: Date.now()
+                  });
+              }
+          } catch (reparseError) {
+              console.warn("Failed to calculate new range", reparseError);
+          }
+
+          setYamlString(updatedYaml);
 
       } catch (e) {
           console.error("Failed to update YAML", e);
@@ -135,7 +164,11 @@ function App() {
           <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Interactive Diagram</span>
         </div>
         
-        <YamlEditor value={yamlString} onChange={setYamlString} />
+        <YamlEditor 
+          value={yamlString} 
+          onChange={setYamlString} 
+          selection={pendingReveal}
+        />
         
         {error && (
             <div className="error-panel glass-panel" style={{ padding: '12px', color: 'var(--accent-error)', fontSize: '0.9rem', borderRadius: '8px' }}>
