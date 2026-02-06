@@ -80,7 +80,6 @@ const TableNode = ({ data }) => {
         <Handle 
             type="target" 
             position={Position.Left} 
-            id="target"
             style={{ 
                 left: -6,
                 width: 8, height: 8, 
